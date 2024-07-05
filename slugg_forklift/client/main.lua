@@ -226,7 +226,7 @@ RegisterNetEvent("slugg:forklift:randomloc", function(palletCoords)
                     TriggerEvent("slugg:forklift:spawnpalette")
                     lib.notify({
                         title = 'Accepter',
-                        description = 'Tu continue de travailler',
+                        description = 'Tu continues de travailler',
                         type = 'success'
                     })
                 else
