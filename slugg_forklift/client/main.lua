@@ -1,5 +1,13 @@
 local QBCore = exports['qb-core']:GetCoreObject()
 local Palettespawn = false
+local Missioncanstart = true
+local liftout = true
+
+
+RegisterNetEvent('slugg_forklift:client:updateMissionState')
+AddEventHandler('slugg_forklift:client:updateMissionState', function(newState)
+    Missioncanstart = newState
+end)
 
 for _, Pedsjobs in ipairs(Config.PedsJobs) do
     npcHash = GetHashKey(Pedsjobs.model)
@@ -87,6 +95,7 @@ RegisterNetEvent('slugg:forklift:takelift', function(vehName)
     end
   
         forklift = CreateVehicle(hash, Config.Forklift.coords.x, Config.Forklift.coords.y, Config.Forklift.coords.z, Config.Forklift.coords.w, true, false)
+        liftout = true
         TaskWarpPedIntoVehicle(ped, forklift, -1)
         SetVehicleFuelLevel(forklift, 100.0)
         SetVehicleDirtLevel(forklift, 0.0)
@@ -100,32 +109,42 @@ end)
 
 
 RegisterNetEvent('slugg:forklift:givelift', function()
-    DeleteVehicle(forklift)
-    TriggerServerEvent("givecashback")
+    if liftout then
+        DeleteVehicle(forklift)
+        TriggerServerEvent("givecashback")
+        liftout = false
+    else
+        QBCore.Functions.Notify("Tu n'as pas de lift de sorti", "info")
+    end
 end)
 
 RegisterNetEvent("slugg:forklift:openmenu", function()
-    if Config.Contextmenu == "ox" then
-        lib.registerContext({
-            id = 'pedsjobs',
-            title = 'Tu veux commencer à travailler?',
-            options = {
-            {
-                title = 'Commencer a travailler',
-                event = 'slugg:forklift:spawnpalette',
-                arrow = false,
-                icon = 'angle-right'
-            },
-            {
-                title = 'Arreter de travailler',
-                event = 'slugg:forklift:stopworking',
-                arrow = false,
-                icon = 'angle-right'
-            },
-            }
-        })
+    if Missioncanstart then
+        if Config.Contextmenu == "ox" then
+            lib.registerContext({
+                id = 'pedsjobs',
+                title = 'Tu veux commencer à travailler?',
+                options = {
+                {
+                    title = 'Commencer a travailler',
+                    event = 'slugg:forklift:spawnpalette',
+                    arrow = false,
+                    icon = 'angle-right'
+                },
+                {
+                    title = 'Arreter de travailler',
+                    event = 'slugg:forklift:stopworking',
+                    arrow = false,
+                    icon = 'angle-right'
+                },
+                }
+            })
 
-        lib.showContext('pedsjobs')
+            lib.showContext('pedsjobs')
+        end
+
+    else
+        QBCore.Functions.Notify("Il n'y a plus de palettes à livrer", "info")
     end
 
 
@@ -170,22 +189,26 @@ end
 
 
 RegisterNetEvent("slugg:forklift:spawnpalette", function()
-    if not Palettespawn then
-        local randomIndex = math.random(1, #Config.PalletLocation)
-        local palettespawn = Config.PalletLocation[randomIndex]
-        local model = Config.PalletModel
-        reqMod(model)
-        pallet = CreateObject(model, palettespawn.coords.x, palettespawn.coords.y, palettespawn.coords.z - 0.95, true, true, true)
-        SetEntityAsMissionEntity(pallet)
-        SetEntityCanBeDamaged(pallet, true)
-        SetEntityDynamic(pallet, true)
-        SetEntityCollision(pallet, true, true)
-        PlaceObjectOnGroundProperly(pallet)
-        createPalletBlip(pallet)
-        TriggerEvent('slugg:forklift:randomloc', palettespawn.coords)
-        Palettespawn = true
+    if Missioncanstart then
+        if not Palettespawn then
+            local randomIndex = math.random(1, #Config.PalletLocation)
+            local palettespawn = Config.PalletLocation[randomIndex]
+            local model = Config.PalletModel
+            reqMod(model)
+            pallet = CreateObject(model, palettespawn.coords.x, palettespawn.coords.y, palettespawn.coords.z - 0.95, true, true, true)
+            SetEntityAsMissionEntity(pallet)
+            SetEntityCanBeDamaged(pallet, true)
+            SetEntityDynamic(pallet, true)
+            SetEntityCollision(pallet, true, true)
+            PlaceObjectOnGroundProperly(pallet)
+            createPalletBlip(pallet)
+            TriggerEvent('slugg:forklift:randomloc', palettespawn.coords)
+            Palettespawn = true
+        else
+            QBCore.Functions.Notify("Tu as déjà un travail en cours", "error")
+        end
     else
-        QBCore.Functions.Notify("Tu as déjà un travail en cours", "error")
+        QBCore.Functions.Notify("Il n'y a plus de palettes à livrer", "info")
     end
 end)
 
@@ -195,19 +218,16 @@ RegisterNetEvent("slugg:forklift:randomloc", function(palletCoords)
     local randomIndex = math.random(1, #Config.Deliveryloc)
     local deliveryloc = Config.Deliveryloc[randomIndex]
     createDeliveryBlip(deliveryloc.coords.x, deliveryloc.coords.y, deliveryloc.coords.z)
-
     Citizen.CreateThread(function()
         while Palettespawn do
             DrawMarker(1, deliveryloc.coords.x, deliveryloc.coords.y, deliveryloc.coords.z - 2, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.0, 3.0, 255, 255, 255, 255, false, true, 2, false, nil, nil, false)
             Citizen.Wait(0)
         end
     end)
-
     Citizen.CreateThread(function()
         while true do
             Citizen.Wait(500) 
             local palletPos = GetEntityCoords(pallet)
-
             local dist = GetDistanceBetweenCoords(deliveryloc.coords.x, deliveryloc.coords.y, deliveryloc.coords.z, palletPos.x, palletPos.y, palletPos.z, true)
             
             if dist <= 2.0 then
@@ -216,26 +236,8 @@ RegisterNetEvent("slugg:forklift:randomloc", function(palletCoords)
                 DeleteEntity(pallet)
                 TriggerServerEvent("slugg:forklift:givereweard")
                 Palettespawn = false
-                local confirmed = lib.alertDialog({
-                    header = 'Travaill de lift',
-                    content = 'Tu veux continuer a travailler?',
-                    centered = true,
-                    cancel = true
-                })
-                if confirmed == 'confirm' then
-                    TriggerEvent("slugg:forklift:spawnpalette")
-                    lib.notify({
-                        title = 'Accepter',
-                        description = 'Tu continues de travailler',
-                        type = 'success'
-                    })
-                else
-                    lib.notify({
-                        title = 'Annulé',
-                        description = 'Vous avez arreter de travailler',
-                        type = 'error'
-                    })
-                end
+                Wait(5000)
+                TriggerEvent("slugg:forklift:spawnpalette")
                 break
             end
         end
